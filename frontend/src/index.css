@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 font-sans;
+  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-gray-900; }
+  ::-webkit-scrollbar-thumb { @apply bg-gray-600 rounded-full; }
+}
+
+@layer components {
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-2xl p-5 shadow-xl;
+  }
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-500 text-white font-semibold px-5 py-2.5 rounded-xl 
+           transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply bg-gray-800 hover:bg-gray-700 text-gray-100 font-medium px-4 py-2 rounded-xl 
+           transition-all duration-200 border border-gray-700;
+  }
+  .badge-green { @apply bg-emerald-900/40 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded-full text-xs font-medium; }
+  .badge-red { @apply bg-red-900/40 text-red-400 border border-red-800 px-2 py-0.5 rounded-full text-xs font-medium; }
+  .badge-yellow { @apply bg-yellow-900/40 text-yellow-400 border border-yellow-800 px-2 py-0.5 rounded-full text-xs font-medium; }
+  .badge-blue { @apply bg-blue-900/40 text-blue-400 border border-blue-800 px-2 py-0.5 rounded-full text-xs font-medium; }
+  .input-field {
+    @apply bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-gray-100 w-full
+           focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+           placeholder-gray-500 transition-all;
+  }
+  .section-title {
+    @apply text-xl font-bold text-white mb-4 flex items-center gap-2;
+  }
+  .stat-card {
+    @apply card flex flex-col items-center justify-center gap-1 text-center min-h-[100px];
+  }
+  .pulse-dot {
+    @apply w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse;
+  }
+}
+
+/* Markdown styles */
+.prose-health h1, .prose-health h2, .prose-health h3 { @apply text-white font-bold mt-4 mb-2; }
+.prose-health h1 { @apply text-xl; }
+.prose-health h2 { @apply text-lg; }
+.prose-health h3 { @apply text-base; }
+.prose-health p { @apply text-gray-300 mb-3 leading-relaxed; }
+.prose-health ul { @apply list-disc list-inside text-gray-300 mb-3 space-y-1; }
+.prose-health ol { @apply list-decimal list-inside text-gray-300 mb-3 space-y-1; }
+.prose-health strong { @apply text-white font-semibold; }
+.prose-health em { @apply text-gray-400 italic; }
+.prose-health code { @apply bg-gray-800 px-1.5 py-0.5 rounded text-blue-300 text-sm; }
+.prose-health blockquote { @apply border-l-4 border-blue-500 pl-4 text-gray-400 italic; }

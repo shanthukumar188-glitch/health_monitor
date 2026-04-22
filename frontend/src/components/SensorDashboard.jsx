@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Heart, Thermometer, Wind, Zap, Activity, Cpu, Wifi, WifiOff,
-  AlertTriangle, TrendingUp, RefreshCw, Gauge, Brain
+  AlertTriangle, Brain
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -27,7 +27,7 @@ function GaugeCard({ label, value, unit, min, max, normalMin, normalMax, color, 
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium
           ${value === null ? 'bg-gray-800 text-gray-500' :
             isNormal ? 'bg-emerald-900/40 text-emerald-400' : 'bg-red-900/40 text-red-400 animate-pulse'}`}>
-          {value === null ? 'No Data' : isNormal ? 'Normal' : '⚠ Alert'}
+          {value === null ? 'No Data' : isNormal ? 'Normal' : 'Alert'}
         </span>
       </div>
       <div className="flex items-end gap-2 mb-3">
@@ -36,7 +36,6 @@ function GaugeCard({ label, value, unit, min, max, normalMin, normalMax, color, 
         </span>
         <span className="text-gray-500 text-sm mb-1">{unit}</span>
       </div>
-      {/* Progress bar */}
       <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 bg-${value === null ? 'gray' : isNormal ? 'emerald' : 'red'}-500`}
@@ -45,7 +44,7 @@ function GaugeCard({ label, value, unit, min, max, normalMin, normalMax, color, 
       </div>
       <div className="flex justify-between text-xs text-gray-600 mt-1">
         <span>{min}{unit}</span>
-        <span className="text-gray-500">Normal: {normalMin}–{normalMax}{unit}</span>
+        <span className="text-gray-500">Normal: {normalMin}-{normalMax}{unit}</span>
         <span>{max}{unit}</span>
       </div>
     </div>
@@ -56,15 +55,23 @@ export default function SensorDashboard({ socket, sensorData }) {
   const [history, setHistory] = useState([]);
   const [connected, setConnected] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
-  const demoRef = useRef(null);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [manualAlertState, setManualAlertState] = useState({ loading: false, message: '', error: false });
+  const demoRef = useRef(null);
 
   useEffect(() => {
-    if (socket) {
-      setConnected(socket.connected);
-      socket.on('connect', () => setConnected(true));
-      socket.on('disconnect', () => setConnected(false));
-    }
+    if (!socket) return;
+
+    setConnected(socket.connected);
+    const onConnect = () => setConnected(true);
+    const onDisconnect = () => setConnected(false);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+    };
   }, [socket]);
 
   useEffect(() => {
@@ -83,7 +90,6 @@ export default function SensorDashboard({ socket, sensorData }) {
     }
   }, [sensorData]);
 
-  // Demo mode: simulate sensor data
   const startDemo = () => {
     setDemoMode(true);
     let t = 0;
@@ -100,6 +106,7 @@ export default function SensorDashboard({ socket, sensorData }) {
         steps: Math.floor(t * 0.3),
         batteryLevel: Math.max(20, 95 - Math.floor(t * 0.05)),
       };
+
       if (socket) socket.emit('sensor_data', simulated);
       setLastUpdate(new Date());
       setHistory((prev) => {
@@ -117,26 +124,63 @@ export default function SensorDashboard({ socket, sensorData }) {
     if (demoRef.current) clearInterval(demoRef.current);
   };
 
-  useEffect(() => () => { if (demoRef.current) clearInterval(demoRef.current); }, []);
+  const triggerManualAlert = async () => {
+    setManualAlertState({ loading: true, message: '', error: false });
+
+    try {
+      const res = await fetch('http://localhost:3001/api/sensors/manual-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'Manual alert failed');
+      }
+
+      const smsText = data.sms?.success
+        ? 'SMS sent successfully.'
+        : data.sms?.body
+          ? 'SMS preview generated. Twilio is not configured.'
+          : 'Alert triggered.';
+      const locationText = data.hasLocation ? ' Location included.' : ' Location unavailable.';
+
+      setManualAlertState({
+        loading: false,
+        message: `${smsText}${locationText}`,
+        error: false,
+      });
+    } catch (error) {
+      setManualAlertState({
+        loading: false,
+        message: error.message || 'Manual alert failed',
+        error: true,
+      });
+    }
+  };
+
+  useEffect(() => () => {
+    if (demoRef.current) clearInterval(demoRef.current);
+  }, []);
 
   const sd = sensorData || {};
 
   const stressLevel = sd.gsrValue
-    ? sd.gsrValue < 300 ? { label: 'Relaxed 😌', color: 'emerald' }
-    : sd.gsrValue < 600 ? { label: 'Moderate 😐', color: 'yellow' }
-    : { label: 'High Stress 😰', color: 'red' }
+    ? sd.gsrValue < 300 ? { label: 'Relaxed', color: 'emerald' }
+    : sd.gsrValue < 600 ? { label: 'Moderate', color: 'yellow' }
+    : { label: 'High Stress', color: 'red' }
     : null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
-      {/* Status bar */}
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="section-title mb-1"><Cpu className="w-5 h-5 text-blue-400" /> ESP32-S3 Wearable Dashboard</h2>
             <p className="text-gray-500 text-xs">MAX30102 • MLX90614 • MPU6050 • GSR • TCA9548A</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {lastUpdate && (
               <span className="text-xs text-gray-500">
                 Updated: {lastUpdate.toLocaleTimeString('en-IN')}
@@ -149,7 +193,7 @@ export default function SensorDashboard({ socket, sensorData }) {
             )}
             {sd.batteryLevel && (
               <span className={`badge-${sd.batteryLevel > 50 ? 'green' : sd.batteryLevel > 20 ? 'yellow' : 'red'}`}>
-                🔋 {sd.batteryLevel}%
+                Battery {sd.batteryLevel}%
               </span>
             )}
             {!demoMode ? (
@@ -158,26 +202,37 @@ export default function SensorDashboard({ socket, sensorData }) {
               </button>
             ) : (
               <button onClick={stopDemo} className="btn-secondary text-xs py-1.5 text-red-400">
-                ⏹ Stop Demo
+                Stop Demo
               </button>
             )}
+            <button
+              onClick={triggerManualAlert}
+              disabled={manualAlertState.loading}
+              className="btn-primary text-xs py-1.5 bg-red-600 hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {manualAlertState.loading ? 'Sending...' : 'Send Test Alert'}
+            </button>
           </div>
         </div>
+        {manualAlertState.message && (
+          <div className={`mt-3 text-xs ${manualAlertState.error ? 'text-red-400' : 'text-emerald-400'}`}>
+            {manualAlertState.message}
+          </div>
+        )}
       </div>
 
-      {/* Sensor cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <GaugeCard label="Heart Rate" value={sd.heartRate ?? null} unit=" BPM"
           min={30} max={180} normalMin={60} normalMax={100} color="red" icon={Heart} />
         <GaugeCard label="SpO2" value={sd.spo2 ?? null} unit="%"
           min={80} max={100} normalMin={95} normalMax={100} color="blue" icon={Wind} decimals={1} />
-        <GaugeCard label="Body Temp" value={sd.temperature ?? null} unit="°C"
+        <GaugeCard label="Body Temp" value={sd.temperature ?? null} unit=" C"
           min={34} max={41} normalMin={36.1} normalMax={37.2} color="orange" icon={Thermometer} decimals={1} />
         <GaugeCard label="GSR (Stress)" value={sd.gsrValue ?? null} unit=""
           min={0} max={1023} normalMin={0} normalMax={700} color="purple" icon={Zap} />
       </div>
 
-      {/* Stress indicator */}
       {stressLevel && (
         <div className={`card border-${stressLevel.color}-800/30 bg-${stressLevel.color}-900/10`}>
           <div className="flex items-center gap-3">
@@ -194,9 +249,7 @@ export default function SensorDashboard({ socket, sensorData }) {
         </div>
       )}
 
-      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Heart Rate chart */}
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
             <Heart className="w-4 h-4 text-red-400" /> Heart Rate History
@@ -220,7 +273,6 @@ export default function SensorDashboard({ socket, sensorData }) {
           </ResponsiveContainer>
         </div>
 
-        {/* SpO2 chart */}
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
             <Wind className="w-4 h-4 text-blue-400" /> SpO2 History
@@ -243,7 +295,6 @@ export default function SensorDashboard({ socket, sensorData }) {
           </ResponsiveContainer>
         </div>
 
-        {/* Temperature chart */}
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
             <Thermometer className="w-4 h-4 text-orange-400" /> Temperature History
@@ -255,12 +306,11 @@ export default function SensorDashboard({ socket, sensorData }) {
               <YAxis domain={[35, 40]} tick={{ fill: '#6b7280', fontSize: 10 }} />
               <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f3f4f6' }} />
               <ReferenceLine y={37.5} stroke="#ef4444" strokeDasharray="3 3" />
-              <Line type="monotone" dataKey="temperature" stroke="#f97316" strokeWidth={2} dot={false} name="°C" />
+              <Line type="monotone" dataKey="temperature" stroke="#f97316" strokeWidth={2} dot={false} name="C" />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        {/* GSR chart */}
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
             <Zap className="w-4 h-4 text-purple-400" /> GSR / Stress History
@@ -284,7 +334,6 @@ export default function SensorDashboard({ socket, sensorData }) {
         </div>
       </div>
 
-      {/* Accelerometer data */}
       {(sd.accelX !== undefined || sd.accelY !== undefined) && (
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
@@ -310,17 +359,26 @@ export default function SensorDashboard({ socket, sensorData }) {
         </div>
       )}
 
-      {/* No data state */}
       {Object.keys(sd).length === 0 && !demoMode && (
         <div className="card text-center py-12">
           <Cpu className="w-16 h-16 text-gray-700 mx-auto mb-4" />
           <p className="text-gray-300 font-semibold mb-2">Waiting for ESP32 Wearable</p>
           <p className="text-gray-500 text-sm mb-6 max-w-lg mx-auto">
-            Flash the firmware from <code className="text-blue-400 bg-gray-800 px-1 rounded">esp32/firmware/health_monitor.ino</code> to your ESP32-S3, connect to WiFi, and it will auto-connect here.
+            You can still test alerts without hardware using the dashboard button below.
           </p>
-          <button onClick={startDemo} className="btn-primary mx-auto">
-            <Activity className="w-4 h-4" /> Try Demo Mode
-          </button>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button onClick={startDemo} className="btn-primary">
+              <Activity className="w-4 h-4" /> Try Demo Mode
+            </button>
+            <button
+              onClick={triggerManualAlert}
+              disabled={manualAlertState.loading}
+              className="btn-primary bg-red-600 hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              {manualAlertState.loading ? 'Sending...' : 'Send Test Alert'}
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -87,11 +87,18 @@ function checkAnomalies(data) {
 
       const fetchFn = require('node-fetch');
 
-      fetchFn(`http://localhost:${process.env.PORT || 3001}/api/sms/alert`, {
+      fetchFn(`http://localhost:${process.env.PORT || 3001}/api/sms/alert-with-location`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: alerts.join('\n') }),
-      }).catch(e => console.error('SMS error:', e.message));
+        body: JSON.stringify({
+          alerts,
+          location: sharedState.lastLocation || null,
+          source: 'socket',
+        }),
+      })
+        .then(res => res.json())
+        .then(result => console.log('Socket alert SMS result:', result))
+        .catch(e => console.error('SMS error:', e.message));
     }
   }
 }
@@ -106,8 +113,9 @@ io.on('connection', socket => {
   });
 
   socket.on('location_update', loc => {
-    if (loc && loc.lat && loc.lon) {
+    if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon)) {
       sharedState.lastLocation = { ...loc, timestamp: new Date() };
+      console.log('Location updated:', sharedState.lastLocation);
     }
   });
 

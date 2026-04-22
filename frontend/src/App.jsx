@@ -79,6 +79,7 @@ export default function App() {
   useEffect(() => {
     if (!socket) return;
     if (!navigator.geolocation) return;
+    let watchId = null;
 
     function sendLocation() {
       navigator.geolocation.getCurrentPosition(
@@ -92,13 +93,30 @@ export default function App() {
           socket.emit('location_update', loc);
         },
         err => console.warn('Geolocation:', err.message),
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
       );
     }
 
     sendLocation();
     const interval = setInterval(sendLocation, 30000);
-    return () => clearInterval(interval);
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const loc = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        };
+        locationRef.current = loc;
+        socket.emit('location_update', loc);
+      },
+      err => console.warn('Geolocation watch:', err.message),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
+    );
+
+    return () => {
+      clearInterval(interval);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    };
   }, [socket]);
 
   const clearAlerts = () => setAlerts([]);

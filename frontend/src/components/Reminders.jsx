@@ -13,6 +13,7 @@ import {
 
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const INTERVALS = [30, 60, 90, 120, 180, 240];
+const alertPhoneLabel = import.meta.env.VITE_ALERT_PHONE || 'your phone';
 
 function Badge({ children, color = 'blue' }) {
   const styles = {
@@ -65,6 +66,19 @@ export default function Reminders({ backend, socket }) {
     setTimeout(() => setToast(null), 5000);
   }
 
+  function getTestToastMessage(smsResult, fallbackLabel) {
+    if (!smsResult || smsResult.reason === 'disabled') {
+      return `${fallbackLabel} Dashboard test fired only. SMS test is off.`;
+    }
+    if (smsResult.success) {
+      return `${fallbackLabel} Dashboard test fired and SMS was sent.`;
+    }
+    if (smsResult.reason === 'not_configured') {
+      return `${fallbackLabel} Dashboard test fired, but SMS is not configured on the backend.`;
+    }
+    return `${fallbackLabel} Dashboard test fired, but SMS failed to send.`;
+  }
+
   async function fetchList() {
     try {
       const r = await fetch(`${backend}/api/reminders/list`);
@@ -97,8 +111,21 @@ export default function Reminders({ backend, socket }) {
   }
 
   async function testWater() {
-    await fetch(`${backend}/api/reminders/test/water`, { method: 'POST' });
-    showToast({ type: 'water', message: 'Test water reminder fired!' });
+    try {
+      const r = await fetch(`${backend}/api/reminders/test/water`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smsAlert: waterSMS }),
+      });
+      const d = await r.json();
+      showToast({
+        type: 'water',
+        message: getTestToastMessage(d.sms, 'Water test'),
+      });
+    } catch (e) {
+      console.error(e);
+      showToast({ type: 'water', message: 'Water test failed.' });
+    }
   }
 
   // ── Medicine ──────────────────────────────────────────────────────────────
@@ -132,12 +159,21 @@ export default function Reminders({ backend, socket }) {
     setMedicines(prev => prev.filter(m => m.id !== id));
   }
 
-  async function testMedicine(name, dose) {
-    await fetch(`${backend}/api/reminders/test/medicine`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, dose }),
-    });
-    showToast({ type: 'medicine', message: `Test: Take ${name}` });
+  async function testMedicine(name, dose, smsAlert = false) {
+    try {
+      const r = await fetch(`${backend}/api/reminders/test/medicine`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, dose, smsAlert }),
+      });
+      const d = await r.json();
+      showToast({
+        type: 'medicine',
+        message: getTestToastMessage(d.sms, `${name} test`),
+      });
+    } catch (e) {
+      console.error(e);
+      showToast({ type: 'medicine', message: `Test failed for ${name}.` });
+    }
   }
 
   return (
@@ -186,7 +222,7 @@ export default function Reminders({ backend, socket }) {
           <div className="flex items-center gap-3 bg-gray-800/50 rounded-xl p-3 border border-gray-700">
             <div className="flex-1">
               <p className="text-sm text-white font-medium">SMS alert on reminder</p>
-              <p className="text-xs text-gray-400">Send SMS to {process.env.ALERT_PHONE || 'your phone'}</p>
+              <p className="text-xs text-gray-400">Send SMS to {alertPhoneLabel}</p>
             </div>
             <button onClick={() => setWaterSMS(v => !v)} className="text-gray-400 hover:text-blue-400 transition-colors">
               {waterSMS ? <ToggleRight className="w-7 h-7 text-blue-400" /> : <ToggleLeft className="w-7 h-7" />}
@@ -302,7 +338,7 @@ export default function Reminders({ backend, socket }) {
                   </div>
                 </div>
                 <div className="flex gap-1.5 flex-shrink-0">
-                  <button onClick={() => testMedicine(med.name, med.dose)} title="Test now"
+                  <button onClick={() => testMedicine(med.name, med.dose, med.smsAlert)} title="Test now"
                     className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-purple-400 transition-colors">
                     <Send className="w-4 h-4" />
                   </button>
